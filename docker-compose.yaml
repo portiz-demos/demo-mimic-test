@@ -1,0 +1,136 @@
+version: '3.9'
+
+services:
+  # ============================================================================
+  # Web UI (React + Vite)
+  # ============================================================================
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        - VITE_ROX_API_KEY=${CLOUDBEES_FM_API_KEY}
+        - NGINX_CONFIG=nginx.local.conf
+    container_name: accountstack-web
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - VITE_API_ACCOUNTS_URL=http://localhost:8001
+      - VITE_API_TRANSACTIONS_URL=http://localhost:8002
+      - VITE_API_INSIGHTS_URL=http://localhost:8003
+      - VITE_ROX_API_KEY=${CLOUDBEES_FM_API_KEY}
+      - VITE_SHOW_DEMO_CREDENTIALS=true
+    depends_on:
+      - api-accounts
+      - api-transactions
+      - api-insights
+    networks:
+      - accountstack-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # Accounts API (Go)
+  # ============================================================================
+  api-accounts:
+    build:
+      context: .
+      dockerfile: ./apps/api-accounts/Dockerfile
+    container_name: accountstack-api-accounts
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./data/seed:/data/seed:ro
+    environment:
+      - GO_ENV=development
+      - PORT=8001
+      - CLOUDBEES_FM_API_KEY=${CLOUDBEES_FM_API_KEY}
+      - DATA_PATH=/data/seed
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-key-change-in-production}
+      - AUTH_USERNAME=${AUTH_USERNAME:-demo@accountstack.com}
+      - AUTH_PASSWORD=${AUTH_PASSWORD:-demo123}
+      - FEATURE_MASK_AMOUNTS=${FEATURE_MASK_AMOUNTS:-false}
+      # - FEATURE_CURRENCY=${FEATURE_CURRENCY:-USD}  # Commented out to enable user-based currency targeting by country
+    networks:
+      - accountstack-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ============================================================================
+  # Transactions API (Go)
+  # ============================================================================
+  api-transactions:
+    build:
+      context: .
+      dockerfile: ./apps/api-transactions/Dockerfile
+    container_name: accountstack-api-transactions
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./data/seed:/data/seed:ro
+    environment:
+      - GO_ENV=development
+      - PORT=8002
+      - CLOUDBEES_FM_API_KEY=${CLOUDBEES_FM_API_KEY}
+      - DATA_PATH=/data/seed
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-key-change-in-production}
+    networks:
+      - accountstack-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ============================================================================
+  # Insights API (Go)
+  # ============================================================================
+  api-insights:
+    build:
+      context: .
+      dockerfile: ./apps/api-insights/Dockerfile
+    container_name: accountstack-api-insights
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./data/seed:/data/seed:ro
+    environment:
+      - GO_ENV=development
+      - PORT=8003
+      - CLOUDBEES_FM_API_KEY=${CLOUDBEES_FM_API_KEY}
+      - DATA_PATH=/data/seed
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-key-change-in-production}
+    networks:
+      - accountstack-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  accountstack-network:
+    name: accountstack-network
+    driver: bridge
+
+# ============================================================================
+# Volumes (for persistence if needed in the future)
+# ============================================================================
+volumes:
+  data-seed:
+    name: accountstack-data-seed
